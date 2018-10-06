@@ -28,6 +28,8 @@
         function transformUsdConfig(usdConfigAsJson) {
             let elements = [];
             
+            console.log(usdConfigAsJson)
+            
             // for each entity...
             for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
                 let entity = usdConfigAsJson.entities.entity[i];
@@ -37,21 +39,24 @@
                     let record = entity.records.record[j];
                     
                     let graphElement = {
-                        id: record._attributes.id
+                        data: {
+                            id: record._attributes.id
+                        }
                     }
                     
                     // for each attribute...
                     for(let k = 0; k < record.field.length; k++){
                         let field = record.field[k];
                         
-                        graphElement[field._attributes.name] = {}
+                        graphElement.data[field._attributes.name] = {}
                         
+                        // for each field...
                         for (var key in field._attributes) {
                             if (field._attributes.hasOwnProperty(key)) {
                                let value = field._attributes[key];
                                 
                                 if (key != "name") {
-                                    graphElement[field._attributes.name][key] = value;
+                                    graphElement.data[field._attributes.name][key] = value;
                                 }
                             }
                         }
@@ -59,12 +64,35 @@
                     
                     elements.push(graphElement);
                 }
+                
+                if (entity.m2mrelationships && entity.m2mrelationships.m2mrelationship){
+                    for (let j = 0; j < entity.m2mrelationships.m2mrelationship.length; j++){
+                        let relationship = entity.m2mrelationships.m2mrelationship[j];
+
+
+                        for (let k = 0; k < relationship.targetids.targetid.length; k++){
+                            let target = relationship.targetids.targetid[k];
+
+                            let connection = {
+                                data: {
+                                    id: i + "_" + j + "_" + k + "_" + relationship._attributes.sourceid,
+                                    source: relationship._attributes.sourceid,
+                                    target: target._text
+                                }
+                            };
+
+                            elements.push(connection);
+                        }
+                    }
+                }
             }
             
             return elements;
         }
         
         function createGraph(graphElements) {
+            console.log(graphElements)
+            
             var cy = cytoscape({
                 container: document.getElementById('graph'), // container to render in
                 elements: graphElements,
