@@ -1,0 +1,125 @@
+<html>
+
+<head>
+    <script type="text/javascript">
+        setTimeout (function(){
+            getText();
+        }, 1000)
+
+        
+        function getText(){
+            // read text from URL location
+            var request = new XMLHttpRequest();
+            request.open('GET', 'data.xml', true);
+            request.send(null);
+            request.onreadystatechange = function () {
+                if (request.readyState === 4 && request.status === 200) {
+                    var type = request.getResponseHeader('Content-Type');
+                    if (type.indexOf("text") !== 1) {
+                        let usdConfigAsJson = JSON.parse(xml2json(request.responseText, {compact: true, spaces: 4}));
+                        let graphElements = transformUsdConfig(usdConfigAsJson);
+                        createGraph(graphElements);
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        function transformUsdConfig(usdConfigAsJson) {
+            let elements = [];
+            
+            // for each entity...
+            for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
+                let entity = usdConfigAsJson.entities.entity[i];
+                
+                // for each record...
+                for (let j = 0; j < entity.records.record.length; j++) {
+                    let record = entity.records.record[j];
+                    
+                    let graphElement = {
+                        id: record._attributes.id
+                    }
+                    
+                    // for each attribute...
+                    for(let k = 0; k < record.field.length; k++){
+                        let field = record.field[k];
+                        
+                        graphElement[field._attributes.name] = {}
+                        
+                        for (var key in field._attributes) {
+                            if (field._attributes.hasOwnProperty(key)) {
+                               let value = field._attributes[key];
+                                
+                                if (key != "name") {
+                                    graphElement[field._attributes.name][key] = value;
+                                }
+                            }
+                        }
+                    }
+                    
+                    elements.push(graphElement);
+                }
+            }
+            
+            return elements;
+        }
+        
+        function createGraph(graphElements) {
+            var cy = cytoscape({
+                container: document.getElementById('graph'), // container to render in
+                elements: graphElements,
+                
+//                [ // list of graph elements to start with
+//                    { // node a
+//                        data: {
+//                            id: 'a'
+//                        }
+//                    },
+//                    { // node b
+//                        data: {
+//                            id: 'b'
+//                        }
+//                    },
+//                    { // edge ab
+//                        data: {
+//                            id: 'ab',
+//                            source: 'a',
+//                            target: 'b'
+//                        }
+//                    }
+//                ],
+                style: [ // the stylesheet for the graph
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': '#666',
+                            'label': 'data(id)'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 3,
+                            'line-color': '#ccc',
+                            'target-arrow-color': '#ccc',
+                            'target-arrow-shape': 'triangle'
+                        }
+                    }
+                ],
+                layout: {
+                    name: 'grid',
+                    rows: 1
+                }
+            });
+        }
+        
+    </script>
+</head>
+
+<body>
+    <div id="graph" style="width:500px; height:500px;"></div>
+    <script type="text/javascript" src="cytoscape.js"></script>
+    <script type="text/javascript" src="xml-js.js"></script>
+</body>
+
+</html>
