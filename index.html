@@ -2,6 +2,8 @@
 
 <head>
     <script type="text/javascript">
+        let cy;
+        let elements = [];
         setTimeout (function(){
             getText();
         }, 1000)
@@ -26,7 +28,8 @@
         }
         
         function transformUsdConfig(usdConfigAsJson) {
-            let elements = [];
+//            let elements = [];
+            
             
             console.log(usdConfigAsJson)
             
@@ -34,13 +37,22 @@
             for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
                 let entity = usdConfigAsJson.entities.entity[i];
                 
+                let parentNode = {
+                    data: {
+                        id: entity._attributes.name
+                    }
+                }
+                elements.push(parentNode);
+                
                 // for each record...
                 for (let j = 0; j < entity.records.record.length; j++) {
                     let record = entity.records.record[j];
-                    
+
                     let graphElement = {
+                        group: "nodes",
                         data: {
-                            id: record._attributes.id
+                            id: entity._attributes.name + ":" + record._attributes.id,
+                            parent: entity._attributes.name
                         }
                     }
                     
@@ -74,10 +86,11 @@
                             let target = relationship.targetids.targetid[k];
 
                             let connection = {
+                                group: "edges",
                                 data: {
                                     id: i + "_" + j + "_" + k + "_" + relationship._attributes.sourceid,
-                                    source: relationship._attributes.sourceid,
-                                    target: target._text
+                                    source: entity._attributes.name + ":" + relationship._attributes.sourceid,
+                                    target: elements.filter(function(ele){return ele.data.id.indexOf("fe02bd12-ca8e-e611-80d3-00155d889a55") !== -1})[0].data.id
                                 }
                             };
 
@@ -93,29 +106,9 @@
         function createGraph(graphElements) {
             console.log(graphElements)
             
-            var cy = cytoscape({
+            cy = cytoscape({
                 container: document.getElementById('graph'), // container to render in
                 elements: graphElements,
-                
-//                [ // list of graph elements to start with
-//                    { // node a
-//                        data: {
-//                            id: 'a'
-//                        }
-//                    },
-//                    { // node b
-//                        data: {
-//                            id: 'b'
-//                        }
-//                    },
-//                    { // edge ab
-//                        data: {
-//                            id: 'ab',
-//                            source: 'a',
-//                            target: 'b'
-//                        }
-//                    }
-//                ],
                 style: [ // the stylesheet for the graph
                     {
                         selector: 'node',
@@ -135,9 +128,28 @@
                     }
                 ],
                 layout: {
-                    name: 'grid',
-                    rows: 1
-                }
+                    name: 'cose-bilkent',
+                    animate: false
+                },
+            });
+            
+            cy.nodes().forEach(function(n){
+                let pos = n.position;
+                
+                n.qtip({
+                  content: JSON.stringify(n.data()),
+                  position: {
+                    my: 'top center',
+                    at: 'bottom center'
+                  },
+                  style: {
+                    classes: 'qtip-bootstrap',
+                    tip: {
+                      width: 16,
+                      height: 8
+                    }
+                  }
+                });
             });
         }
         
@@ -145,9 +157,17 @@
 </head>
 
 <body>
-    <div id="graph" style="width:500px; height:500px;"></div>
+    <div id="graph" style="width:1000px; height:800px;"></div>
+    
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
     <script type="text/javascript" src="js/cytoscape.js"></script>
     <script type="text/javascript" src="js/xml-js.js"></script>
+    
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.js"></script>
+    <link href="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.css" rel="stylesheet" type="text/css" />
+    
+    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-cose-bilkent/1.6.5/cytoscape-cose-bilkent.js"></script>
+    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-qtip/2.7.0/cytoscape-qtip.js"></script>
 </body>
 
 </html>
