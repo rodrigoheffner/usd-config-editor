@@ -1,24 +1,30 @@
 <html>
 
 <head>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+
+
     <script type="text/javascript">
         let cy;
         let elements = [];
-        setTimeout (function(){
+        setTimeout(function() {
             getText();
         }, 1000)
 
-        
-        function getText(){
+
+        function getText() {
             // read text from URL location
             var request = new XMLHttpRequest();
             request.open('GET', 'data.xml', true);
             request.send(null);
-            request.onreadystatechange = function () {
+            request.onreadystatechange = function() {
                 if (request.readyState === 4 && request.status === 200) {
                     var type = request.getResponseHeader('Content-Type');
                     if (type.indexOf("text") !== 1) {
-                        let usdConfigAsJson = JSON.parse(xml2json(request.responseText, {compact: true, spaces: 4}));
+                        let usdConfigAsJson = JSON.parse(xml2json(request.responseText, {
+                            compact: true,
+                            spaces: 4
+                        }));
                         let graphElements = transformUsdConfig(usdConfigAsJson);
                         createGraph(graphElements);
                         return true;
@@ -26,24 +32,21 @@
                 }
             }
         }
-        
+
         function transformUsdConfig(usdConfigAsJson) {
-//            let elements = [];
-            
-            
             console.log(usdConfigAsJson)
-            
+
             // for each entity...
             for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
                 let entity = usdConfigAsJson.entities.entity[i];
-                
+
                 let parentNode = {
                     data: {
                         id: entity._attributes.name
                     }
                 }
                 elements.push(parentNode);
-                
+
                 // for each record...
                 for (let j = 0; j < entity.records.record.length; j++) {
                     let record = entity.records.record[j];
@@ -55,34 +58,34 @@
                             parent: entity._attributes.name
                         }
                     }
-                    
+
                     // for each attribute...
-                    for(let k = 0; k < record.field.length; k++){
+                    for (let k = 0; k < record.field.length; k++) {
                         let field = record.field[k];
-                        
+
                         graphElement.data[field._attributes.name] = {}
-                        
+
                         // for each field...
                         for (var key in field._attributes) {
                             if (field._attributes.hasOwnProperty(key)) {
-                               let value = field._attributes[key];
-                                
+                                let value = field._attributes[key];
+
                                 if (key != "name") {
                                     graphElement.data[field._attributes.name][key] = value;
                                 }
                             }
                         }
                     }
-                    
+
                     elements.push(graphElement);
                 }
-                
-                if (entity.m2mrelationships && entity.m2mrelationships.m2mrelationship){
-                    for (let j = 0; j < entity.m2mrelationships.m2mrelationship.length; j++){
+
+                if (entity.m2mrelationships && entity.m2mrelationships.m2mrelationship) {
+                    for (let j = 0; j < entity.m2mrelationships.m2mrelationship.length; j++) {
                         let relationship = entity.m2mrelationships.m2mrelationship[j];
 
 
-                        for (let k = 0; k < relationship.targetids.targetid.length; k++){
+                        for (let k = 0; k < relationship.targetids.targetid.length; k++) {
                             let target = relationship.targetids.targetid[k];
 
                             let connection = {
@@ -90,7 +93,9 @@
                                 data: {
                                     id: i + "_" + j + "_" + k + "_" + relationship._attributes.sourceid,
                                     source: entity._attributes.name + ":" + relationship._attributes.sourceid,
-                                    target: elements.filter(function(ele){return ele.data.id.indexOf("fe02bd12-ca8e-e611-80d3-00155d889a55") !== -1})[0].data.id
+                                    target: elements.filter(function(ele) {
+                                        return ele.data.id.indexOf("fe02bd12-ca8e-e611-80d3-00155d889a55") !== -1
+                                    })[0].data.id
                                 }
                             };
 
@@ -99,13 +104,13 @@
                     }
                 }
             }
-            
+
             return elements;
         }
-        
+
         function createGraph(graphElements) {
             console.log(graphElements)
-            
+
             cy = cytoscape({
                 container: document.getElementById('graph'), // container to render in
                 elements: graphElements,
@@ -118,10 +123,10 @@
                         }
                     },
                     {
-                      selector: ':parent',
-                      style: {
-                        'background-opacity': 0.333
-                      }
+                        selector: ':parent',
+                        style: {
+                            'background-opacity': 0.333
+                        }
                     },
                     {
                         selector: 'edge',
@@ -136,94 +141,160 @@
                 layout: {
                     name: 'cose-bilkent',
                     animate: false,
-  // Called on `layoutready`
-  ready: function () {
-  },
-  // Called on `layoutstop`
-  stop: function () {
-  },
-  // Whether to include labels in node dimensions. Useful for avoiding label overlap
-  nodeDimensionsIncludeLabels: false,
-  // number of ticks per frame; higher is faster but more jerky
-  refresh: 30,
-  // Whether to fit the network view after when done
-  fit: true,
-  // Padding on fit
-  padding: 50,
-  // Whether to enable incremental mode
-  randomize: false,
-  // Node repulsion (non overlapping) multiplier
-  nodeRepulsion: 9000,
-  // Ideal (intra-graph) edge length
-  idealEdgeLength: 100,
-  // Divisor to compute edge forces
-  edgeElasticity: 0.90,
-  // Nesting factor (multiplier) to compute ideal edge length for inter-graph edges
-  nestingFactor: 0.2,
-  // Gravity force (constant)
-  gravity: 0.50,
-  // Maximum number of iterations to perform
-  numIter: 2500,
-  // Whether to tile disconnected nodes
-  tile: true,
-  // Type of layout animation. The option set is {'during', 'end', false}
-  animate: 'end',
-  // Amount of vertical space to put between degree zero nodes during tiling (can also be a function)
-  tilingPaddingVertical: 50,
-  // Amount of horizontal space to put between degree zero nodes during tiling (can also be a function)
-  tilingPaddingHorizontal: 50,
-  // Gravity range (constant) for compounds
-  gravityRangeCompound: 4.5,
-  // Gravity force (constant) for compounds
-  gravityCompound: 3.0,
-  // Gravity range (constant)
-  gravityRange: 7.8,
-  // Initial cooling factor for incremental layout
-  initialEnergyOnIncremental: 2.5
+                    // Called on `layoutready`
+                    ready: function() {},
+                    // Called on `layoutstop`
+                    stop: function() {},
+                    // Whether to include labels in node dimensions. Useful for avoiding label overlap
+                    nodeDimensionsIncludeLabels: false,
+                    // number of ticks per frame; higher is faster but more jerky
+                    refresh: 30,
+                    // Whether to fit the network view after when done
+                    fit: true,
+                    // Padding on fit
+                    padding: 50,
+                    // Whether to enable incremental mode
+                    randomize: false,
+                    // Node repulsion (non overlapping) multiplier
+                    nodeRepulsion: 9000,
+                    // Ideal (intra-graph) edge length
+                    idealEdgeLength: 100,
+                    // Divisor to compute edge forces
+                    edgeElasticity: 0.90,
+                    // Nesting factor (multiplier) to compute ideal edge length for inter-graph edges
+                    nestingFactor: 0.2,
+                    // Gravity force (constant)
+                    gravity: 0.50,
+                    // Maximum number of iterations to perform
+                    numIter: 2500,
+                    // Whether to tile disconnected nodes
+                    tile: true,
+                    // Type of layout animation. The option set is {'during', 'end', false}
+                    animate: 'end',
+                    // Amount of vertical space to put between degree zero nodes during tiling (can also be a function)
+                    tilingPaddingVertical: 50,
+                    // Amount of horizontal space to put between degree zero nodes during tiling (can also be a function)
+                    tilingPaddingHorizontal: 50,
+                    // Gravity range (constant) for compounds
+                    gravityRangeCompound: 4.5,
+                    // Gravity force (constant) for compounds
+                    gravityCompound: 3.0,
+                    // Gravity range (constant)
+                    gravityRange: 7.8,
+                    // Initial cooling factor for incremental layout
+                    initialEnergyOnIncremental: 2.5
                 },
             });
+
+            renderjson.set_show_to_level("all");
             
-            cy.nodes().forEach(function(n){
-                let pos = n.position;
+            cy.nodes().on('tap', function(e) {
+                let ele = e.target;
+
+                let renderedJson = renderjson(ele.data());
+                document.getElementById("info-panel").style.opacity = "0.8";
                 
-                n.qtip({
-                  content: JSON.stringify(n.data()),
-                  position: {
-                    my: 'top center',
-                    at: 'bottom center'
-                  },
-                  style: {
-                    classes: 'qtip-bootstrap',
-                    tip: {
-                      width: 16,
-                      height: 8
-                    }
-                  }
-                });
+                document.getElementById("card-content").innerHTML = "";
+                document.getElementById("card-header").innerHTML = "Properties for " + ele.data().id;
+                document.getElementById("card-content").appendChild(renderedJson);
+            });
+
+            cy.nodes().forEach(function(n) {
+
+                //                n.qtip({
+                //                  content: JSON.stringify(n.data()),
+                //                  position: {
+                //                    my: 'top center',
+                //                    at: 'bottom center'
+                //                  },
+                //                  style: {
+                //                    classes: 'qtip-bootstrap',
+                //                    tip: {
+                //                      width: 16,
+                //                      height: 8
+                //                    }
+                //                  }
+                //                });
             });
         }
+
+        function removeElementsByClass(className) {
+            var elements = document.getElementsByClassName(className);
+            while (elements.length > 0) {
+                elements[0].parentNode.removeChild(elements[0]);
+            }
+        }
         
+        function isEmptyObject(obj) {
+          for(var prop in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, prop)) {
+              return false;
+            }
+          }
+          return true;
+        }
+
     </script>
+
+    <style>
+        .info-panel {
+            position: absolute;
+            right: 15px;
+            top: 15px;
+            opacity: 0.0;
+            width: 600px;
+        }
+        
+        .info-row {
+            font-size: 12px;
+        }
+    </style>
 </head>
 
 <body>
-    <div id="graph" style="width:1000px; height:800px; border: 1px solid #d2d2d2;"></div>
-    
+    <!--    <div class="container">-->
+    <div class="row">
+        <div class="col" id="graph" style="border: 1px solid #d2d2d2; height:800px;">
+
+        </div>
+    </div>
+
+
+    <div class="info-panel" id="info-panel">
+        <div class="card">
+            <div class="card-header" id="card-header">
+                Element properties
+            </div>
+            <div class="card-body" id="card-content" style="font-size:11px;">
+                <h5 class="card-title">Properties</h5>
+                <dl class="row info-row">
+                    <dt class="col-sm-3">owningbusinessunit</dt>
+                    <dd class="col-sm-9">e82c465d-5d40-e711-80f0-02155dc970dc</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
     <script type="text/javascript" src="js/cytoscape.js"></script>
     <script type="text/javascript" src="js/xml-js.js"></script>
-    
+
     <script src="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.js"></script>
     <link href="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.css" rel="stylesheet" type="text/css" />
-    
+
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-cose-bilkent/1.6.5/cytoscape-cose-bilkent.js"></script>
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-qtip/2.7.0/cytoscape-qtip.js"></script>
-    
+
     <script src="https://cdn.rawgit.com/cpettitt/dagre/v0.7.4/dist/dagre.min.js"></script>
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.5.0/cytoscape-dagre.js"></script>
-    
+
     <script src="https://cdn.rawgit.com/maxkfranz/weaver/v1.2.0/dist/weaver.min.js"></script>
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-spread/1.3.1/cytoscape-spread.js"></script>
+    <script src="render-json/renderjson.js"></script>
 </body>
 
 </html>
