@@ -2,17 +2,21 @@
 
 <head>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 
     <script type="text/javascript">
         let cy;
+        let cyUtilities;
         let elements = [];
+        let parents = [];
+        let parentColours = ['#A5D8FF', '#AFD0D6', '#BFB6BB', '#C49799', '#E5E9EC', '#DDCAD9', '#D1B1CB', '#D3C1C3', '#E2D0BE', '#EEE5BF', '#E8F8C1', '#D1FFC6', '#C0E0DE', '#64B6AC'];
         setTimeout(function() {
-            getText();
+            getUsdConfig();
         }, 1000)
 
 
-        function getText() {
+        function getUsdConfig() {
             // read text from URL location
             var request = new XMLHttpRequest();
             request.open('GET', 'data.xml', true);
@@ -45,7 +49,10 @@
                         id: entity._attributes.name
                     }
                 }
+                parents.push(entity._attributes.name);
                 elements.push(parentNode);
+
+                createFilterCheckbox(entity._attributes.name);
 
                 // for each record...
                 for (let j = 0; j < entity.records.record.length; j++) {
@@ -84,22 +91,42 @@
                     for (let j = 0; j < entity.m2mrelationships.m2mrelationship.length; j++) {
                         let relationship = entity.m2mrelationships.m2mrelationship[j];
 
+                        if (relationship.targetids.targetid.length) {
+                            for (let k = 0; k < relationship.targetids.targetid.length; k++) {
+                                let target = relationship.targetids.targetid[k];
+                                let edge = createEdge(entity, relationship, target._text, k);
 
-                        for (let k = 0; k < relationship.targetids.targetid.length; k++) {
-                            let target = relationship.targetids.targetid[k];
-
-                            let connection = {
-                                group: "edges",
-                                data: {
-                                    id: i + "_" + j + "_" + k + "_" + relationship._attributes.sourceid,
-                                    source: entity._attributes.name + ":" + relationship._attributes.sourceid,
-                                    target: elements.filter(function(ele) {
-                                        return ele.data.id.indexOf("fe02bd12-ca8e-e611-80d3-00155d889a55") !== -1
-                                    })[0].data.id
+                                if (edge) {
+                                    elements.push(edge);
                                 }
-                            };
+                            }
+                        } else if (relationship.targetids.targetid) {
+                            let edge = createEdge(entity, relationship, relationship.targetids.targetid._text, 0);
+                            if (edge) {
+                                elements.push(edge);
+                            }
+                        }
 
-                            elements.push(connection);
+                        function createEdge(entity, relationship, targetId, targetIdIndex) {
+                            let target;
+
+                            try {
+                                target = elements.filter(function(ele) {
+                                    return ele.data.id.indexOf(targetId) !== -1
+                                })[0].data.id
+                            } catch (e) {
+                                console.error(e);
+                            }
+                            if (target) {
+                                return {
+                                    group: "edges",
+                                    data: {
+                                        id: i + "_" + j + "_" + targetIdIndex + "_" + relationship._attributes.sourceid,
+                                        source: entity._attributes.name + ":" + relationship._attributes.sourceid,
+                                        target:target
+                                    }
+                                };
+                            }
                         }
                     }
                 }
@@ -114,30 +141,7 @@
             cy = cytoscape({
                 container: document.getElementById('graph'), // container to render in
                 elements: graphElements,
-                style: [ // the stylesheet for the graph
-                    {
-                        selector: 'node',
-                        style: {
-                            'background-color': '#666',
-                            'label': 'data(id).substr(1)'
-                        }
-                    },
-                    {
-                        selector: ':parent',
-                        style: {
-                            'background-opacity': 0.333
-                        }
-                    },
-                    {
-                        selector: 'edge',
-                        style: {
-                            'width': 3,
-                            'line-color': '#ccc',
-                            'target-arrow-color': '#ccc',
-                            'target-arrow-shape': 'triangle'
-                        }
-                    }
-                ],
+                style: [],
                 layout: {
                     name: 'cose-bilkent',
                     animate: false,
@@ -146,25 +150,25 @@
                     // Called on `layoutstop`
                     stop: function() {},
                     // Whether to include labels in node dimensions. Useful for avoiding label overlap
-                    nodeDimensionsIncludeLabels: false,
+                    nodeDimensionsIncludeLabels: true,
                     // number of ticks per frame; higher is faster but more jerky
                     refresh: 30,
                     // Whether to fit the network view after when done
                     fit: true,
                     // Padding on fit
-                    padding: 50,
+                    padding: 5,
                     // Whether to enable incremental mode
                     randomize: false,
                     // Node repulsion (non overlapping) multiplier
-                    nodeRepulsion: 9000,
+                    nodeRepulsion: 250, //1000,
                     // Ideal (intra-graph) edge length
-                    idealEdgeLength: 100,
+                    idealEdgeLength: 50, //100,
                     // Divisor to compute edge forces
                     edgeElasticity: 0.90,
                     // Nesting factor (multiplier) to compute ideal edge length for inter-graph edges
-                    nestingFactor: 0.2,
+                    nestingFactor: 0.2, //0.2,
                     // Gravity force (constant)
-                    gravity: 0.50,
+                    gravity: 1.0, //0.50,
                     // Maximum number of iterations to perform
                     numIter: 2500,
                     // Whether to tile disconnected nodes
@@ -176,45 +180,92 @@
                     // Amount of horizontal space to put between degree zero nodes during tiling (can also be a function)
                     tilingPaddingHorizontal: 50,
                     // Gravity range (constant) for compounds
-                    gravityRangeCompound: 4.5,
+                    gravityRangeCompound: 1.0, //4.5,
                     // Gravity force (constant) for compounds
-                    gravityCompound: 3.0,
+                    gravityCompound: 1.0, //3.0,
                     // Gravity range (constant)
-                    gravityRange: 7.8,
+                    gravityRange: 1.0, //7.8,
                     // Initial cooling factor for incremental layout
-                    initialEnergyOnIncremental: 2.5
+                    initialEnergyOnIncremental: 1.0 //2.5
                 },
             });
 
+            // Setting the style
+            let style = [ // the stylesheet for the graph
+                {
+                    selector: 'node',
+                    style: {
+                        'background-color': '#666'
+                        //                            ,
+                        //                            'label': 'data(id)'
+                    }
+                },
+                {
+                    selector: ':parent',
+                    style: {
+                        'background-opacity': 0.333,
+                        'font-size': "80px"
+                    }
+                },
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 3,
+                        'line-color': '#ccc',
+                        'target-arrow-color': '#ccc',
+                        'target-arrow-shape': 'triangle'
+                    }
+                },
+                {
+                    selector: ':selected',
+                    style: {
+                        //'background-color': 'blue'
+                    }
+                }
+            ]
+
+            for (let i = 0; i < parents.length; i++) {
+                style.push({
+                    selector: 'node[id = "' + parents[i] + '"]',
+                    style: {
+                        'background-color': parentColours[i],
+                        'label': 'data(id)'
+                    }
+                })
+            }
+            cy.style(style);
+
+            cy.maxZoom(0.5);
+            cy.minZoom(0.20);
+
             renderjson.set_show_to_level("all");
-            
+
+            cyUtilities = cy.viewUtilities({
+                neighbor: function(node) {
+                    return node.closedNeighborhood();
+                },
+                neighborSelectTime: 1000
+            });
+
             cy.nodes().on('tap', function(e) {
                 let ele = e.target;
 
                 let renderedJson = renderjson(ele.data());
-                document.getElementById("info-panel").style.opacity = "0.8";
-                
+                document.getElementById("info-panel").style.display = "block";
+
+                // TODO: Cleanup
                 document.getElementById("card-content").innerHTML = "";
-                document.getElementById("card-header").innerHTML = "Properties for " + ele.data().id;
+                document.getElementById("card-header").innerHTML = '<button id="closeProperties" type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>';
+                document.getElementById("card-header").innerHTML = document.getElementById("card-header").innerHTML + "Properties for " + ele.data().id;
                 document.getElementById("card-content").appendChild(renderedJson);
+
+                document.getElementById("closeProperties").addEventListener("click", function() {
+                    document.getElementById("info-panel").style.display = "none";
+                });
             });
 
-            cy.nodes().forEach(function(n) {
-
-                //                n.qtip({
-                //                  content: JSON.stringify(n.data()),
-                //                  position: {
-                //                    my: 'top center',
-                //                    at: 'bottom center'
-                //                  },
-                //                  style: {
-                //                    classes: 'qtip-bootstrap',
-                //                    tip: {
-                //                      width: 16,
-                //                      height: 8
-                //                    }
-                //                  }
-                //                });
+            document.getElementById("closeFilters").addEventListener("click", function() {
+                document.getElementById("filter").style.display = "none";
             });
         }
 
@@ -224,14 +275,66 @@
                 elements[0].parentNode.removeChild(elements[0]);
             }
         }
-        
+
         function isEmptyObject(obj) {
-          for(var prop in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, prop)) {
-              return false;
+            for (var prop in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, prop)) {
+                    return false;
+                }
             }
-          }
-          return true;
+            return true;
+        }
+
+        function createFilterCheckbox(parentId) {
+            document.getElementById("filterCardBody").innerHTML = document.getElementById("filterCardBody").innerHTML +
+                '<div class="form-check">' +
+                '<input class="form-check-input" onclick="filterElements(\'' + parentId + '\')" type="checkbox" checked id="filter_' + parentId + '">' +
+                '<label class="form-check-label" for="filter_' + parentId + '">' +
+                parentId +
+                '</label>' +
+                '</div>';
+
+
+        }
+
+        function filterElements(parentId) {
+            cy.startBatch();
+            cy.filter(function(element, i) {
+                if (!element.isParent() && element.data().id.startsWith(parentId)) {
+                    if (element.visible()) {
+                        element.css("visibility", "hidden");
+                    } else {
+                        element.css("visibility", "visible");
+                    }
+                }
+            })
+            cy.endBatch();
+        }
+
+        window.onload = function() {
+            document.getElementById('search-form').onsubmit = function() {
+                let searchCriteria = document.getElementById("search").value;
+
+                console.log(searchCriteria);
+
+                cy.startBatch();
+                let result = cy.filter(function(element, i) {
+                    if (!searchCriteria) {
+                        return true;
+                    } else if (element.data().id.indexOf(searchCriteria) !== -1) {
+                        //                        
+                        //                        cyUtilities.highlight(element.parents());
+                        return true;
+                    }
+                })
+                cyUtilities.highlight(result);
+                cyUtilities.zoomToSelected(result);
+
+
+                console.log(result)
+
+                cy.endBatch();
+            }
         }
 
     </script>
@@ -240,9 +343,18 @@
         .info-panel {
             position: absolute;
             right: 15px;
-            top: 15px;
-            opacity: 0.0;
-            width: 600px;
+            top: 45px;
+            opacity: 0.8;
+            width: 400px;
+            display: none;
+        }
+        
+        .filter {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            opacity: 0.8;
+            width: 300px;
         }
         
         .info-row {
@@ -259,10 +371,37 @@
             border: 5px solid #d2d2d2;
             background-color: #f0f0f0;
         }
+        
+        .node-hidden {
+            visibility: hidden;
+        }
+
     </style>
 </head>
 
 <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">USD Configuration Browser</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav mx-auto">
+                <li class="nav-item">
+                    <button class="btn btn btn-secondary" type="button"><i class="material-icons md-48">filter_list</i></button>
+                </li>
+                <li class="nav-item">
+                    <button class="btn btn btn-secondary" type="button"><i class="material-icons md-48">assignment</i></button>
+                </li>
+            </ul>
+            <form class="form-inline my-2 my-lg-0" id="search-form">
+                <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search" id="search">
+                <button class="btn my-2 my-sm-0" type="submit" id="search-button">Search</button>
+            </form>
+        </div>
+    </nav>
+
     <!--    <div class="container">-->
     <div class="row">
         <div class="col" id="graph" style="border: 1px solid #d2d2d2; height:800px;">
@@ -285,38 +424,39 @@
             </div>
         </div>
     </div>
-    
-    <div class="search">
-        <form>
-          <div class="form-group row">
-            <label for="staticEmail" class="col-sm-2 col-form-label">Search</label>
-            <div class="col-sm-10">
-              <input type="text" placeholder="Enter any property..." class="form-control-plaintext" id="search">
+
+    <div id="filter" class="filter">
+        <div class="card">
+            <div class="card-header">
+                <button id="closeFilters" type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button> Filter elements
             </div>
-          </div>
-        </form>
+            <div class="card-body" id="filterCardBody">
+
+            </div>
+        </div>
     </div>
-
-
-
-
 
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
     <script type="text/javascript" src="js/cytoscape.js"></script>
     <script type="text/javascript" src="js/xml-js.js"></script>
 
+    <!--
     <script src="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.js"></script>
     <link href="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.css" rel="stylesheet" type="text/css" />
+-->
 
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-cose-bilkent/1.6.5/cytoscape-cose-bilkent.js"></script>
-    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-qtip/2.7.0/cytoscape-qtip.js"></script>
+    <!--    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-qtip/2.7.0/cytoscape-qtip.js"></script>-->
 
+    <!--
     <script src="https://cdn.rawgit.com/cpettitt/dagre/v0.7.4/dist/dagre.min.js"></script>
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.5.0/cytoscape-dagre.js"></script>
+-->
 
-    <script src="https://cdn.rawgit.com/maxkfranz/weaver/v1.2.0/dist/weaver.min.js"></script>
-    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-spread/1.3.1/cytoscape-spread.js"></script>
+    <!--    <script src="https://cdn.rawgit.com+/maxkfranz/weaver/v1.2.0/dist/weaver.min.js"></script>-->
+    <!--    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-spread/1.3.1/cytoscape-spread.js"></script>-->
     <script src="render-json/renderjson.js"></script>
+    <script src="https://rawgit.com/iVis-at-Bilkent/cytoscape.js-view-utilities/unstable/cytoscape-view-utilities.js"></script>
 </body>
 
 </html>
