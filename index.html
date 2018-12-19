@@ -7,10 +7,15 @@
 
     <script type="text/javascript">
         let cy;
+        let startTime = new Date();
         let cyUtilities;
         let elements = [];
+        let edges = [];
         let parents = [];
         let parentColours = ['#A5D8FF', '#AFD0D6', '#BFB6BB', '#C49799', '#E5E9EC', '#DDCAD9', '#D1B1CB', '#D3C1C3', '#E2D0BE', '#EEE5BF', '#E8F8C1', '#D1FFC6', '#C0E0DE', '#64B6AC'];
+
+        // recordAttributes refer to attributes that point to another record. These attributes will be used to create connections (edges) between elements
+        let recordAttributes = ["msdyusd_action"]
         setTimeout(function() {
             getUsdConfig();
         }, 1000)
@@ -25,21 +30,38 @@
                 if (request.readyState === 4 && request.status === 200) {
                     var type = request.getResponseHeader('Content-Type');
                     if (type.indexOf("text") !== 1) {
-                        let usdConfigAsJson = JSON.parse(xml2json(request.responseText, {
-                            compact: true,
-                            spaces: 4
-                        }));
-                        let graphElements = transformUsdConfig(usdConfigAsJson);
-                        createGraph(graphElements);
-                        return true;
+                        loadGraph(request.responseText);
                     }
                 }
             }
         }
 
-        function transformUsdConfig(usdConfigAsJson) {
-            console.log(usdConfigAsJson)
+        function loadGraph(content) {
+            resetGraph();
 
+            let usdConfigAsJson = JSON.parse(xml2json(content, {
+                compact: true,
+                spaces: 4
+            }));
+            let before = Date.now();
+            let graphElements = transformUsdConfig(usdConfigAsJson);
+            console.log("after transformation " + (Date.now() - before))
+            createGraph(graphElements);
+            console.log("after creating graph " + (Date.now() - before))
+            return true;
+        }
+
+        function resetGraph() {
+            cy = {};
+            startTime = new Date();
+            cyUtilities = {};
+            elements = [];
+            edges = [];
+            parents = [];
+            document.getElementById("filterCardBody").innerHTML = "";
+        }
+
+        function transformUsdConfig(usdConfigAsJson) {
             // for each entity...
             for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
                 let entity = usdConfigAsJson.entities.entity[i];
@@ -86,6 +108,48 @@
 
                     elements.push(graphElement);
                 }
+            }
+
+            // create edges
+            createEdges(elements, usdConfigAsJson);
+
+            return elements;
+        }
+
+        function createEdges(elements, usdConfigAsJson) {
+            for (let i = 0; i < usdConfigAsJson.entities.entity.length; i++) {
+                let entity = usdConfigAsJson.entities.entity[i];
+
+                // for each record...
+                for (let j = 0; j < entity.records.record.length; j++) {
+                    let record = entity.records.record[j];
+
+                    // for each attribute...
+                    let msdyusd_action;
+                    for (let k = 0; k < record.field.length; k++) {
+                        let field = record.field[k];
+
+                        // for each field...
+                        for (var key in field._attributes) {
+                            if (field._attributes.hasOwnProperty(key)) {
+                                let value = field._attributes[key];
+
+                                // ensure that the value points to a GUID, not a different number
+                                if (field._attributes.name == "msdyusd_action" && value.length == 36) {
+                                    msdyusd_action = value;
+                                }
+                            }
+                        }
+                    }
+
+                    // creating edge between msdyusd_action and this element
+                    if (msdyusd_action) {
+                        let edge = createEdge(entity, record._attributes.id, msdyusd_action, "action");
+                        if (edge) {
+                            edges.push(edge);
+                        }
+                    }
+                }
 
                 if (entity.m2mrelationships && entity.m2mrelationships.m2mrelationship) {
                     for (let j = 0; j < entity.m2mrelationships.m2mrelationship.length; j++) {
@@ -94,45 +158,50 @@
                         if (relationship.targetids.targetid.length) {
                             for (let k = 0; k < relationship.targetids.targetid.length; k++) {
                                 let target = relationship.targetids.targetid[k];
-                                let edge = createEdge(entity, relationship, target._text, k);
+                                let edge = createEdge(entity, relationship._attributes.sourceid, target._text, i + "_" + j + "_" + k + "_");
 
                                 if (edge) {
-                                    elements.push(edge);
+                                    edges.push(edge);
                                 }
                             }
                         } else if (relationship.targetids.targetid) {
-                            let edge = createEdge(entity, relationship, relationship.targetids.targetid._text, 0);
+                            let edge = createEdge(entity, relationship._attributes.sourceid, relationship.targetids.targetid._text, i + "_" + j + "_" + 0 + "_");
                             if (edge) {
-                                elements.push(edge);
-                            }
-                        }
-
-                        function createEdge(entity, relationship, targetId, targetIdIndex) {
-                            let target;
-
-                            try {
-                                target = elements.filter(function(ele) {
-                                    return ele.data.id.indexOf(targetId) !== -1
-                                })[0].data.id
-                            } catch (e) {
-                                console.error(e);
-                            }
-                            if (target) {
-                                return {
-                                    group: "edges",
-                                    data: {
-                                        id: i + "_" + j + "_" + targetIdIndex + "_" + relationship._attributes.sourceid,
-                                        source: entity._attributes.name + ":" + relationship._attributes.sourceid,
-                                        target:target
-                                    }
-                                };
+                                edges.push(edge);
                             }
                         }
                     }
                 }
+
+                function isRecordAttribute() {
+
+                }
+
+                function createEdge(entity, sourceId, targetId, idPrefix) {
+                    let target;
+
+                    try {
+                        target = elements.filter(function(ele) {
+                            return ele.data.id.indexOf(targetId) !== -1
+                        })
+                    } catch (e) {
+                        console.error(e);
+                    }
+
+                    if (target && target.length) {
+                        return {
+                            group: "edges",
+                            data: {
+                                id: idPrefix + sourceId,
+                                source: entity._attributes.name + ":" + sourceId,
+                                target: target[0].data.id
+                            }
+                        };
+                    }
+                }
             }
 
-            return elements;
+            console.log(edges);
         }
 
         function createGraph(graphElements) {
@@ -146,9 +215,14 @@
                     name: 'cose-bilkent',
                     animate: false,
                     // Called on `layoutready`
-                    ready: function() {},
+                    ready: function() {
+                        console.log("ready - startup time: " + (Date.now() - startTime.getTime()));
+                        cy.add(edges);
+                    },
                     // Called on `layoutstop`
-                    stop: function() {},
+                    stop: function() {
+                        console.log("ready")
+                    },
                     // Whether to include labels in node dimensions. Useful for avoiding label overlap
                     nodeDimensionsIncludeLabels: true,
                     // number of ticks per frame; higher is faster but more jerky
@@ -157,7 +231,7 @@
                     fit: true,
                     // Padding on fit
                     padding: 5,
-                    // Whether to enable incremental mode
+                    //to enable incremental mode
                     randomize: false,
                     // Node repulsion (non overlapping) multiplier
                     nodeRepulsion: 250, //1000,
@@ -204,7 +278,7 @@
                     selector: ':parent',
                     style: {
                         'background-opacity': 0.333,
-                        'font-size': "80px"
+                        'font-size': "40px"
                     }
                 },
                 {
@@ -247,6 +321,8 @@
                 neighborSelectTime: 1000
             });
 
+            let mainElementProperties = ['id', 'uii_hostedapplicationid', 'uii_name', 'msdyusd_name', 'msdyusd_action', 'msdyusd_condition', 'msdyusd_actiondata', 'msdyusd_name', 'msdyusd_from', 'msdyusd_toolbarid']
+            
             cy.nodes().on('tap', function(e) {
                 let ele = e.target;
 
@@ -258,6 +334,18 @@
                 document.getElementById("card-header").innerHTML = '<button id="closeProperties" type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>';
                 document.getElementById("card-header").innerHTML = document.getElementById("card-header").innerHTML + "Properties for " + ele.data().id;
                 document.getElementById("card-content").appendChild(renderedJson);
+                
+                let spans = document.getElementById("card-content").getElementsByTagName("span");
+                for (let i = 0; i < spans.length; i++) {
+                    let span = spans[i];
+                    let propertyName = span.innerHTML.substr(1, span.innerHTML.length -2);
+                    if (span.classList.contains("key") && mainElementProperties.indexOf(propertyName) !== -1) {
+                        span.classList.add("main-attribute");
+                        span.nextSibling.classList.add("main-attribute");
+                        span.nextSibling.nextSibling.classList.add("main-attribute");
+                        span.nextSibling.nextSibling.nextSibling.classList.add("main-attribute");
+                    }
+                }
 
                 document.getElementById("closeProperties").addEventListener("click", function() {
                     document.getElementById("info-panel").style.display = "none";
@@ -267,6 +355,123 @@
             document.getElementById("closeFilters").addEventListener("click", function() {
                 document.getElementById("filter").style.display = "none";
             });
+
+            document.getElementById("fileUpload").addEventListener("click", function() {
+                document.getElementById("fileUploadInput").click();
+            });
+
+            document.getElementById("filterToggle").addEventListener("click", function() {
+                let isVisible = getStyle("filter", "display") !== "none";
+
+                if (isVisible) {
+                    document.getElementById("filter").style.display = "none";
+                } else {
+                    document.getElementById("filter").style.display = "block";
+                }
+            });
+
+            document.getElementById("propertiesToggle").addEventListener("click", function() {
+                let isVisible = getStyle("info-panel", "display") !== "none";
+
+                if (isVisible) {
+                    document.getElementById("info-panel").style.display = "none";
+                } else {
+                    document.getElementById("info-panel").style.display = "block";
+                }
+            });
+
+            // Checks for uiievents, uiiactions and toolbarbuttons:
+            // Elements without relationships
+            // Duplicate elements
+            document.getElementById("validate").addEventListener("click", function() {
+                let elementsWithoutConnectionArray = [];
+                let elementsWithoutConnections = elements.filter(function(element, index) {
+                    if (element.data.parent && (element.data.parent.indexOf("uiievent") !== -1 || element.data.parent.indexOf("uii_action") !== -1 || element.data.parent.indexOf("toolbarbutton") !== -1)) {
+                        console.log(element.data.parent)
+                    
+                        // first check for elements without relationships
+                        let elementHasConnection = false;
+
+                        for (let i = 0; i < edges.length; i++) {
+                            let edge = edges[i];
+                            if (edge.data.source == element.data.id || edge.data.target == element.data.id) {
+                                elementHasConnection = true;
+                            }
+                        }
+
+                        // then check if any element has a property value matching an ID
+    //                    if (!elementHasConnection && element.data.id.indexOf("fffcfa2f-8c4a-e711-80f2-02155dc970dc") !== -1) {
+                        if (!elementHasConnection) {
+                            for (let i = 0; i < elements.length; i++) {
+                                let currentElement = elements[i];
+                                // ignore itself
+                                if (element.data.id != currentElement.data.id) {
+    //                                if (element.data.id.indexOf("03d0916c-062e-e311-87f2-00155dd8d60b") !== -1 && 
+    //                                    currentElement.data.id.indexOf("03d0916c-062e-e311-87f2-00155dd8d60b") !== -1) {
+    //                                    console.log("found");
+    //                                }
+
+                                    elementHasConnection = hasMatchingPropertyValue(currentElement, getGuidFromId(element.data.id));
+                                }
+
+                                if (elementHasConnection) {
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!elementHasConnection) {
+                            elementsWithoutConnectionArray.push(element.data.id);
+                        }
+
+                        return elementHasConnection;
+                    }
+                });
+
+                let renderedJson = renderjson({
+                    "totalRecords": elementsWithoutConnectionArray.length,
+                    "records": elementsWithoutConnectionArray
+                });
+                document.getElementById("info-panel").style.display = "block";
+
+                // TODO: Cleanup
+                document.getElementById("card-content").innerHTML = "";
+                document.getElementById("card-header").innerHTML = '<button id="closeProperties" type="button" class="close" aria-label="Close"><span aria-hidden="true">&times;</span></button>';
+                document.getElementById("card-header").innerHTML = document.getElementById("card-header").innerHTML + "Records without connections";
+                document.getElementById("card-content").appendChild(renderedJson);
+
+                document.getElementById("closeProperties").addEventListener("click", function() {
+                    document.getElementById("info-panel").style.display = "none";
+                });
+            });
+        }
+        
+        function getGuidFromId(id) {
+            return id.substr(id.indexOf(":") +1);
+        }
+
+        function hasMatchingPropertyValue(obj, value) {
+            let hasMatchingValue = false;
+            for (var k in obj) {
+                if (typeof obj[k] == "object" && obj[k] !== null) {
+                    hasMatchingValue = hasMatchingPropertyValue(obj[k], value);
+                } else {
+                    if (obj.hasOwnProperty(k)) {
+                        hasMatchingValue = obj[k] == value;
+                    }
+                }
+                
+                if (hasMatchingValue) {
+                    break;
+                }
+            }
+            
+            return hasMatchingValue;
+        }
+
+        function getStyle(id, name) {
+            var element = document.getElementById(id);
+            return element.currentStyle ? element.currentStyle[name] : window.getComputedStyle ? window.getComputedStyle(element, null).getPropertyValue(name) : null;
         }
 
         function removeElementsByClass(className) {
@@ -313,30 +518,56 @@
 
         window.onload = function() {
             document.getElementById('search-form').onsubmit = function() {
+                event.preventDefault();
+
                 let searchCriteria = document.getElementById("search").value;
 
                 console.log(searchCriteria);
 
                 cy.startBatch();
+                cyUtilities.removeHighlights();
                 let result = cy.filter(function(element, i) {
-                    if (!searchCriteria) {
-                        return true;
-                    } else if (element.data().id.indexOf(searchCriteria) !== -1) {
-                        //                        
-                        //                        cyUtilities.highlight(element.parents());
-                        return true;
+                    if (element.group() == "nodes") {
+                        if (!searchCriteria) {
+                            return true;
+                        } else if (element.data().id.indexOf(searchCriteria) !== -1) {
+                            return true;
+                        }
                     }
                 })
-                cyUtilities.highlight(result);
-                cyUtilities.zoomToSelected(result);
+                if (result.length) {
+                    cyUtilities.highlight(result);
+                    cyUtilities.zoomToSelected(result);
+                }
 
 
                 console.log(result)
 
                 cy.endBatch();
+                
+                if (searchCriteria) {
+                    document.getElementById("search-results-info").style.display = "block";
+                    document.getElementById("search-results-info").innerHTML = "<span>Records found: " + (result.length ? result.length : "0") + "</span>";
+                } else {
+                    document.getElementById("search-results-info").style.display = "none";
+                }
             }
         }
 
+        function loadConfigFile() {
+            let fileUploadInput = document.getElementById("fileUploadInput");
+
+            var file = fileUploadInput.files[0];
+
+            var reader = new FileReader();
+            reader.onload = function(progressEvent) {
+                // Entire file
+                if (progressEvent.target.result) {
+                    loadGraph(progressEvent.target.result);
+                }
+            };
+            reader.readAsText(file);
+        }
     </script>
 
     <style>
@@ -375,24 +606,67 @@
         .node-hidden {
             visibility: hidden;
         }
-
+        
+        .button-icon i {
+            padding-right: 5px;
+        }
+        
+        .nav-item .button-icon {
+            margin-right: 15px;
+        }
+        
+        #search-results-info {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            background: #f0f0f0;
+            padding: 5px 10px;
+            font-weight: bold;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .main-attribute {
+            font-weight: bold;
+            font-size: 12px;
+        }
     </style>
 </head>
 
 <body>
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <a class="navbar-brand" href="#">USD Configuration Browser</a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul class="navbar-nav mx-auto">
+            <ul class="navbar-nav mr-auto">
                 <li class="nav-item">
-                    <button class="btn btn btn-secondary" type="button"><i class="material-icons md-48">filter_list</i></button>
+                    <input id="fileUploadInput" type="file" style="display:none;" onchange="loadConfigFile()" />
+                    <button id="fileUpload" class="btn button-icon d-flex align-items-center" title="Upload Config">
+                        <i class="material-icons md-48">cloud_upload</i>
+                        File Upload
+                    </button>
                 </li>
                 <li class="nav-item">
-                    <button class="btn btn btn-secondary" type="button"><i class="material-icons md-48">assignment</i></button>
+                    <button class="btn button-icon d-flex align-items-center" id="filterToggle" title="Toggle Filter">
+                        <i class="material-icons md-48">filter_list</i>
+                        Filter
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="btn button-icon d-flex align-items-center" id="propertiesToggle" title="Toggle Properties">
+                        <i class="material-icons md-48">assignment</i>
+                        Properties
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="btn button-icon d-flex align-items-center" title="Download Config">
+                        <i class="material-icons md-48">cloud_download</i>
+                        Download
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="btn button-icon d-flex align-items-center" id="validate" title="Validate">
+                        <i class="material-icons md-48">done_outline</i>
+                        Validate
+                    </button>
                 </li>
             </ul>
             <form class="form-inline my-2 my-lg-0" id="search-form">
@@ -401,6 +675,7 @@
             </form>
         </div>
     </nav>
+    <div id="search-results-info"></div>
 
     <!--    <div class="container">-->
     <div class="row">
@@ -409,18 +684,13 @@
         </div>
     </div>
 
-
     <div class="info-panel" id="info-panel">
         <div class="card">
             <div class="card-header" id="card-header">
                 Element properties
             </div>
             <div class="card-body" id="card-content" style="font-size:11px;">
-                <h5 class="card-title">Properties</h5>
-                <dl class="row info-row">
-                    <dt class="col-sm-3">owningbusinessunit</dt>
-                    <dd class="col-sm-9">e82c465d-5d40-e711-80f0-02155dc970dc</dd>
-                </dl>
+                Select an element to see it's properties
             </div>
         </div>
     </div>
@@ -440,21 +710,8 @@
     <script type="text/javascript" src="js/cytoscape.js"></script>
     <script type="text/javascript" src="js/xml-js.js"></script>
 
-    <!--
-    <script src="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.js"></script>
-    <link href="http://cdnjs.cloudflare.com/ajax/libs/qtip2/2.2.0/jquery.qtip.min.css" rel="stylesheet" type="text/css" />
--->
-
     <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-cose-bilkent/1.6.5/cytoscape-cose-bilkent.js"></script>
-    <!--    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-qtip/2.7.0/cytoscape-qtip.js"></script>-->
 
-    <!--
-    <script src="https://cdn.rawgit.com/cpettitt/dagre/v0.7.4/dist/dagre.min.js"></script>
-    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.5.0/cytoscape-dagre.js"></script>
--->
-
-    <!--    <script src="https://cdn.rawgit.com+/maxkfranz/weaver/v1.2.0/dist/weaver.min.js"></script>-->
-    <!--    <script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-spread/1.3.1/cytoscape-spread.js"></script>-->
     <script src="render-json/renderjson.js"></script>
     <script src="https://rawgit.com/iVis-at-Bilkent/cytoscape.js-view-utilities/unstable/cytoscape-view-utilities.js"></script>
 </body>
